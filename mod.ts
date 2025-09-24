@@ -130,6 +130,7 @@ function assemble( options?: BatoConfigOptions ): { compose: Compose; cx: typeof
         return classes;
       }
 
+      // TODO: write proper logic for this one at the moment of `bato` invokation
       // incompatible
       if ( config.incompatible ) {
         for ( const key of Object.keys( config.incompatible ) ) {
@@ -138,6 +139,10 @@ function assemble( options?: BatoConfigOptions ): { compose: Compose; cx: typeof
             if ( props[key] in config.incompatible[key] ) {
               // @ts-expect-error: kinda imposible to make inference right
               const incompatibles = config.incompatible[key][props[key]] as object;
+
+              if ( typeof incompatibles !== "object" || !incompatibles ) {
+                throw new Error( "!" );
+              }
 
               for ( const incompatible of Object.keys( incompatibles ) ) {
                 // @ts-expect-error: no inference needed
@@ -230,11 +235,7 @@ function toString( value: any ): string {
   return value.toString();
 }
 
-const assmbled: {
-  compose: Compose;
-  cx: typeof seseg;
-  bato: Bato;
-} = assemble();
+const assmbled: { compose: Compose; cx: typeof seseg; bato: Bato } = assemble();
 
 const bato: Bato = assmbled.bato;
 const cx: typeof seseg = assmbled.cx;

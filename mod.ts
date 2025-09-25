@@ -5,7 +5,8 @@ import { type ClassValue, seseg } from "@codeandmoney/seseg";
 type UnionToIntersection<U> = (U extends any ? ( k: U ) => void : never) extends ( k: infer I ) => void ? I : never;
 type StringToBoolean<T> = T extends "true" | "false" ? boolean : T;
 
-// bato
+// Bato Types
+
 type BatoConfigBase = { base?: ClassValue };
 type BatoVariantShape = Record<string, Record<string, ClassValue>>;
 type ClassProp =
@@ -43,7 +44,7 @@ type Bato = <_ extends "iternal use only", V>(
       incompatible?: {
         [Variant in keyof V]?: {
           [Key in keyof V[Variant]]?: {
-            [IncompatibleVariant in Exclude<keyof V, Variant>]?: readonly (keyof V[IncompatibleVariant])[];
+            [IncompatibleVariant in Exclude<keyof V, Variant>]: (keyof V[IncompatibleVariant])[];
           };
         };
       };
@@ -67,8 +68,10 @@ interface BatoConfigOptions {
 }
 
 // assemble
-function assemble( options?: BatoConfigOptions ): { compose: Compose; cx: typeof seseg; bato: Bato } {
-  const cx: typeof seseg = ( ...inputs ) => {
+function assemble(
+  options?: BatoConfigOptions,
+): { compose: Compose; cx: ( ...classes: ClassValue[] ) => string; bato: Bato } {
+  const cx: ( ...classes: ClassValue[] ) => string = ( ...inputs ) => {
     if ( typeof options?.hooks?.onComplete === "function" ) {
       return options?.hooks.onComplete( seseg( inputs ) );
     }
@@ -84,6 +87,8 @@ function assemble( options?: BatoConfigOptions ): { compose: Compose; cx: typeof
     if ( !config.variants ) {
       return ( props?: ClassProp ): string => cx( config.base, props?.class, props?.className );
     }
+
+    const assertIncompatible = getAssertIncompatible( config.incompatible );
 
     return function variants( props ): string {
       let classes = cx( config.base );
@@ -130,34 +135,36 @@ function assemble( options?: BatoConfigOptions ): { compose: Compose; cx: typeof
         return classes;
       }
 
-      // TODO: write proper logic for this one at the moment of `bato` invokation
-      // incompatible
-      if ( config.incompatible ) {
-        for ( const key of Object.keys( config.incompatible ) ) {
-          if ( key in props ) {
-            // @ts-expect-error: no inference needed
-            if ( props[key] in config.incompatible[key] ) {
-              // @ts-expect-error: kinda imposible to make inference right
-              const incompatibles = config.incompatible[key][props[key]] as object;
+      assertIncompatible( props );
 
-              if ( typeof incompatibles !== "object" || !incompatibles ) {
-                throw new Error( "!" );
-              }
+      // // TODO: write proper logic for this one at the moment of `bato` invokation
+      // // incompatible
+      // if ( config.incompatible ) {
+      //   for ( const key of Object.keys( config.incompatible ) ) {
+      //     if ( key in props ) {
+      //       // @ts-expect-error: no inference needed
+      //       if ( props[key] in config.incompatible[key] ) {
+      //         // @ts-expect-error: kinda imposible to make inference right
+      //         const incompatibles = config.incompatible[key][props[key]] as object;
 
-              for ( const incompatible of Object.keys( incompatibles ) ) {
-                // @ts-expect-error: no inference needed
-                if ( incompatible in props && incompatibles[incompatible].includes( props[incompatible] ) ) {
-                  throw new Error(
-                    // @ts-expect-error: no inference needed
-                    // deno-fmt-ignore
-                    `You called variants with incompatible variatns: { ${ key }: "${ props[key] }"} incompatible with {  ${incompatible}: "${props[incompatible]}"}`,
-                  );
-                }
-              }
-            }
-          }
-        }
-      }
+      //         if ( typeof incompatibles !== "object" || !incompatibles ) {
+      //           throw new Error( "!" );
+      //         }
+
+      //         for ( const incompatible of Object.keys( incompatibles ) ) {
+      //           // @ts-expect-error: no inference needed
+      //           if ( incompatible in props && incompatibles[incompatible].includes( props[incompatible] ) ) {
+      //             throw new Error(
+      //               // @ts-expect-error: no inference needed
+      //               // deno-fmt-ignore
+      //               `You called variants with incompatible variatns: { ${ key }: "${ props[key] }"} incompatible with {  ${incompatible}: "${props[incompatible]}"}`,
+      //             );
+      //           }
+      //         }
+      //       }
+      //     }
+      //   }
+      // }
 
       // TODO: rewrite to go through variants from props - not from config
       for ( const variant of Object.keys( config.variants! ) as (keyof typeof config.variants)[] ) {
@@ -235,10 +242,41 @@ function toString( value: any ): string {
   return value.toString();
 }
 
-const assmbled: { compose: Compose; cx: typeof seseg; bato: Bato } = assemble();
+type Incompatible = Record<string, Record<string, Record<string, string[]>>>;
+
+function getAssertIncompatible( incompatible?: unknown ): ( props: Record<string, any> ) => void {
+  if ( !incompatible ) {
+    return () => {};
+  }
+
+  const incompatibleKeys = new Set( Object.keys( incompatible ) );
+
+  return ( props ) => {
+    for ( const key of Object.keys( props ) ) {
+      if ( incompatibleKeys.has( key ) ) {
+        if ( props[key] in ( incompatible as Incompatible )[key] ) {
+          const incompatibles = ( incompatible as Incompatible )[key][props[key]];
+
+          if ( typeof incompatibles !== "object" || !incompatibles ) {
+            continue;
+          }
+
+          for ( const incompatible of Object.keys( incompatibles ) ) {
+            if ( incompatible in props && incompatibles[incompatible].includes( props[incompatible] ) ) {
+              // deno-fmt-ignore
+              throw new Error( `You called bato with incompatible variatns: { ${ key }: "${ props[key] }"} incompatible with {  ${incompatible}: "${props[incompatible]}"}` );
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
+const assmbled: { compose: Compose; cx: ( ...classes: ClassValue[] ) => string; bato: Bato } = assemble();
 
 const bato: Bato = assmbled.bato;
-const cx: typeof seseg = assmbled.cx;
+const cx: ( ...classes: ClassValue[] ) => string = assmbled.cx;
 const compose: Compose = assmbled.compose;
 
 export type { Bato, BatoConfigOptions, BatoProps, ClassValue, Compose };

@@ -2,6 +2,8 @@ import { classes } from "@codeandmoney/seseg";
 import { describe, test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import { assemble, bato, type BatoProps, compose } from "@codeandmoney/bato";
+import type * as Bato from "@codeandmoney/bato";
+import { assertThrows } from "@std/assert";
 
 describe("bato", () => {
   describe("without base", () => {
@@ -792,10 +794,7 @@ describe("bato", () => {
           "button font-semibold border rounded button--primary bg-blue-500 text-white border-transparent hover:bg-blue-600 button--disabled opacity-050 cursor-not-allowed button--medium text-base py-2 px-4 m-0 button--primary-medium uppercase",
         ],
         [
-          {
-            intent: "secondary",
-            size: "unset",
-          },
+          { intent: "secondary", size: "unset" },
           "button font-semibold border rounded button--secondary bg-white text-gray-800 border-gray-400 hover:bg-gray-100 button--enabled cursor-pointer m-0",
         ],
         [
@@ -824,19 +823,11 @@ describe("bato", () => {
         ],
         // !@TODO Add type "extractor" including class prop
         [
-          {
-            intent: "primary",
-            m: 0,
-            class: "adhoc-class",
-          } as ButtonWithoutBaseWithDefaultsProps,
+          { intent: "primary", m: 0, class: "adhoc-class" } as ButtonWithoutBaseWithDefaultsProps,
           "button font-semibold border rounded button--primary bg-blue-500 text-white border-transparent hover:bg-blue-600 button--enabled cursor-pointer button--medium text-base py-2 px-4 m-0 button--primary-medium uppercase adhoc-class",
         ],
         [
-          {
-            intent: "primary",
-            m: 1,
-            className: "adhoc-classname",
-          } as ButtonWithoutBaseWithDefaultsProps,
+          { intent: "primary", m: 1, className: "adhoc-classname" } as ButtonWithoutBaseWithDefaultsProps,
           "button font-semibold border rounded button--primary bg-blue-500 text-white border-transparent hover:bg-blue-600 button--enabled cursor-pointer button--medium text-base py-2 px-4 m-1 button--primary-medium uppercase adhoc-classname",
         ],
       ];
@@ -3274,5 +3265,99 @@ describe("assemble", () => {
         expect( classListSplit[classListSplit.length - 1] ).toBe( suffix );
       });
     });
+  });
+});
+
+describe("bato incopitable", () => {
+  const withIncopitable = bato( {
+    base: "base",
+
+    variants: {
+      size: { first: "first", second: "second", third: "third" },
+      color: { one: "one", two: "two", three: "three" },
+      shape: { solid: "solid", filled: "filled", outline: "outline" },
+    },
+
+    compoundVariants: [
+      { color: "one", size: "first", className: "three" },
+      { color: "two", size: "second", className: "three" },
+    ],
+
+    defaultVariants: { color: "two", size: "first" },
+
+    incompatible: {
+      size: {
+        first: { color: [ "one" ], shape: [ "solid" ] },
+      },
+
+      color: {
+        two: { shape: [ "filled" ], size: [ "second" ] },
+      },
+
+      shape: {
+        outline: { color: [ "one", "two" ], size: [ "first", "second" ] },
+      },
+    },
+  } );
+
+  test("allways throws", () => {
+    const varints = [
+      //size
+      { size: "first", color: "one" },
+      { size: "first", shape: "solid" },
+
+      // color
+      { color: "two", shape: "filled" },
+      { color: "two", size: "second" },
+
+      // shape
+      { shape: "outline", color: "one" },
+      { shape: "outline", color: "two" },
+      { shape: "outline", size: "first" },
+      { shape: "outline", size: "second" },
+    ] satisfies Bato.BatoProps<typeof withIncopitable>[];
+
+    for ( const variant of varints ) {
+      assertThrows( () => withIncopitable( variant ) );
+    }
+  });
+
+  test("never throws", () => {
+    const varints = [
+      // size
+      { size: "first", color: "two" },
+      { size: "first", color: "three" },
+      { size: "first", shape: "filled" },
+
+      { size: "second", shape: "solid" },
+      { size: "second", shape: "filled" },
+
+      { size: "third", shape: "outline" },
+      { size: "third", shape: "solid" },
+
+      // color
+      { color: "one", shape: "solid" },
+
+      { color: "two", shape: "solid" },
+
+      { color: "three", shape: "solid" },
+      { color: "three", shape: "filled" },
+      { color: "three", shape: "outline" },
+
+      // shape
+      { shape: "solid", color: "one" },
+      { shape: "solid", color: "two" },
+      { shape: "solid", color: "three" },
+
+      { shape: "solid", size: "second" },
+      { shape: "solid", size: "third" },
+
+      { shape: "outline", size: "third" },
+      { shape: "outline", color: "three" },
+    ] satisfies Bato.BatoProps<typeof withIncopitable>[];
+
+    for ( const variant of varints ) {
+      withIncopitable( variant );
+    }
   });
 });
